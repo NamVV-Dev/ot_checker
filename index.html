@@ -10,139 +10,92 @@
           --accent:#1a73e8; --ok:#1e8e3e; --bad:#d93025; --warn:#e37400; --info:#5f6368; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  main { max-width: 1150px; margin: 0 auto; padding: 24px 16px 64px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
   .sub { color: var(--muted); margin: 0 0 20px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px; }
   label { display:block; font-weight:600; margin:0 0 6px; }
   .hint { color:var(--muted); font-size:13px; font-weight:400; }
   .field { margin-bottom:14px; }
-  input[type=text], input[type=url] { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:7px; font:inherit; }
-  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
-  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-  .row > .field { flex:1 1 260px; }
+  input[type=month] { padding:8px 10px; border:1px solid var(--line); border-radius:7px; font:inherit; }
   button { font:inherit; border-radius:7px; padding:9px 16px; border:1px solid var(--line); background:#fff; cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:11px 28px; }
   button:disabled { opacity:.55; cursor:default; }
   .status { font-size:14px; color:var(--muted); }
   .status.ok { color:var(--ok); } .status.err { color:var(--bad); }
-  details summary { cursor:pointer; color:var(--muted); font-size:14px; }
-  .summary { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .summary { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 12px; }
   .pill { border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:14px; background:#fff; cursor:pointer; }
+  .pill.static { cursor:default; }
   .pill.active { border-color:var(--accent); background:#e8f0fe; }
   .pill b { margin-left:4px; }
   table { width:100%; border-collapse:collapse; font-size:14px; }
   th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { background:#fafbfc; font-weight:600; position:sticky; top:0; }
+  th { background:#fafbfc; font-weight:600; }
   .tbl { overflow-x:auto; }
-  .k { font-weight:600; white-space:nowrap; }
-  .k.SAI { color:var(--bad); } .k.TRONG { color:var(--bad); } .k.HUY { color:var(--warn); }
-  .k.THUA { color:var(--warn); } .k.LA { color:var(--info); }
+  .k { font-weight:600; }
+  .k.bad { color:var(--bad); } .k.warn { color:var(--warn); } .k.info { color:var(--info); }
   .mono { font-family: ui-monospace, Consolas, monospace; white-space:nowrap; }
   .empty { text-align:center; color:var(--ok); padding:24px; font-weight:600; }
-  .err-box { color:var(--bad); white-space:pre-wrap; }
 </style>
 </head>
 <body>
 <main>
   <h1>Check giờ OT</h1>
-  <p class="sub">So giờ đăng ký trong nhóm chat với sheet công ty. Mỗi người, mỗi ngày lấy tin nhắn <b>cuối cùng</b> (update / fix / hủy).</p>
+  <p class="sub">So giờ OT trong nhóm chat với form đăng ký OT, rồi so form với giờ checkin/checkout trong bảng công.</p>
 
   <div class="card">
     <div class="field">
       <label for="chatFile">1. File chat (.txt) <span class="hint">— xuất từ nhóm “Team đăng kí OT”</span></label>
       <input type="file" id="chatFile" accept=".txt,text/plain">
     </div>
-
     <div class="field">
-      <label for="xlsFile">2. File Excel của công ty <span class="hint">— .xlsx (hoặc .csv)</span></label>
-      <input type="file" id="xlsFile" accept=".xlsx,.xls,.csv">
+      <label for="formFile">2. Form đăng ký OT (.xlsx) <span class="hint">— có các sheet “2026.Tháng 11”…</span></label>
+      <input type="file" id="formFile" accept=".xlsx,.xls">
     </div>
-
     <div class="field">
-      <label for="sheetName">3. Tên sheet <span class="hint">— để trống sẽ lấy sheet đầu tiên</span></label>
-      <input type="text" id="sheetName" list="sheetList" placeholder="(sheet đầu tiên)">
-      <datalist id="sheetList"></datalist>
+      <label for="congFile">3. Bảng công (.xlsx) <span class="hint">— có các sheet “CÔNG CHI TIẾT T11.2026”…</span></label>
+      <input type="file" id="congFile" accept=".xlsx,.xls">
     </div>
-
+    <div class="field">
+      <label for="month">4. Tháng cần check</label>
+      <input type="month" id="month">
+    </div>
     <button id="checkBtn" class="primary" type="button">Check</button>
     <span id="checkStatus" class="status" style="margin-left:12px"></span>
   </div>
 
-  <div class="card" id="resultCard" hidden>
-    <div class="summary" id="summary"></div>
+  <div class="card" id="cardChat" hidden>
+    <h2>① Chat ↔ Form đăng ký OT</h2>
+    <div class="hint">Mỗi người, mỗi ngày lấy tin nhắn cuối cùng (update / fix / hủy).</div>
+    <div class="summary" id="sumChat"></div>
     <div class="tbl"><table>
-      <thead><tr><th>Ngày</th><th>Người</th><th>Lỗi</th><th>Chat</th><th>Sheet</th><th>Tin nhắn</th></tr></thead>
-      <tbody id="tbody"></tbody>
+      <thead><tr><th>Ngày</th><th>Người</th><th>Lỗi</th><th>Chat</th><th>Form</th><th>Tin nhắn</th></tr></thead>
+      <tbody id="tbChat"></tbody>
+    </table></div>
+  </div>
+
+  <div class="card" id="cardCong" hidden>
+    <h2>② Form đăng ký OT ↔ Checkin / Checkout</h2>
+    <div class="hint" id="congNote"></div>
+    <div class="summary" id="sumCong"></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Ngày</th><th>Người</th><th>Lỗi</th><th>Giờ OT đăng ký</th><th>Checkin</th><th>Checkout</th><th>OT thực tế</th></tr></thead>
+      <tbody id="tbCong"></tbody>
     </table></div>
   </div>
 </main>
 
 <script>
 const $ = id => document.getElementById(id);
-
-// ---------- Excel ----------
-let workbook = null, wbFile = null;
-async function loadWorkbook(f) {
-  if (wbFile === f && workbook) return workbook;
-  if (!window.XLSX) throw new Error("Chưa tải được thư viện đọc Excel (cần mạng lần đầu mở trang)");
-  workbook = XLSX.read(await f.arrayBuffer(), { type: "array", cellDates: true });
-  wbFile = f;
-  return workbook;
-}
-function cellText(v) {
-  if (v instanceof Date) {
-    const d = new Date(v.getTime() + 12 * 3600e3); // tránh lệch vài giây/múi giờ
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-  }
-  return v == null ? "" : String(v);
-}
-async function readCompanyRows() {
-  const f = $("xlsFile").files[0];
-  if (!f) throw new Error("Chưa chọn file Excel của công ty");
-  if (/\.csv$/i.test(f.name)) return parseCSV(await f.text());
-  const wb = await loadWorkbook(f);
-  const want = $("sheetName").value.trim();
-  let name = wb.SheetNames[0];
-  if (want) {
-    name = wb.SheetNames.find(n => n === want) || wb.SheetNames.find(n => norm(n) === norm(want));
-    if (!name) throw new Error(`Không có sheet “${want}”. Các sheet: ${wb.SheetNames.join(", ")}`);
-  }
-  $("checkStatus").dataset.sheet = name;
-  return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" })
-    .map(r => r.map(cellText));
-}
-$("xlsFile").addEventListener("change", async () => {
-  const f = $("xlsFile").files[0];
-  $("sheetList").innerHTML = "";
-  if (!f || /\.csv$/i.test(f.name)) return;
-  try {
-    const wb = await loadWorkbook(f);
-    $("sheetList").innerHTML = wb.SheetNames.map(n => `<option value="${esc(n)}">`).join("");
-  } catch (e) { setCheck(e.message, "err"); }
-});
-
-// ---------- CSV ----------
-function parseCSV(text) {
-  const rows = []; let row = [], cur = "", q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) {
-      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
-      else cur += c;
-    } else if (c === '"') q = true;
-    else if (c === ",") { row.push(cur); cur = ""; }
-    else if (c === "\n") { row.push(cur.replace(/\r$/, "")); rows.push(row); row = []; cur = ""; }
-    else cur += c;
-  }
-  if (cur || row.length) { row.push(cur); rows.push(row); }
-  return rows;
-}
+const now = new Date();
+$("month").value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
 // ---------- helpers ----------
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pad = n => String(n).padStart(2, "0");
 function norm(s) {
-  return s.replace(/Đ/g, "D").replace(/đ/g, "d").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  return String(s).replace(/Đ/g, "D").replace(/đ/g, "d").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 function parseTime(h, m) {
   m = (m || "0").slice(0, 2);
@@ -150,33 +103,61 @@ function parseTime(h, m) {
 }
 const TIME_SRC = "(\\d{1,2})(?:[hH:](\\d{0,3}))?\\s*-\\s*(\\d{1,2})(?:[hH:](\\d{0,3}))?";
 function parseRange(s) {
-  const m = s.match(new RegExp(TIME_SRC));
+  const m = String(s).match(new RegExp(TIME_SRC));
   return m ? [parseTime(m[1], m[2]), parseTime(m[3], m[4])] : null;
 }
-const pad = n => String(n).padStart(2, "0");
-const fmt = r => r == null ? "(trống)" : `${pad(r[0] / 60 | 0)}:${pad(r[0] % 60)}-${pad(r[1] / 60 | 0)}:${pad(r[1] % 60)}`;
+const hm = t => `${pad(t / 60 | 0)}:${pad(t % 60)}`;
+const fmt = r => r == null ? "(trống)" : `${hm(r[0])}-${hm(r[1])}`;
 const same = (a, b) => (a == null && b == null) || (a && b && a[0] === b[0] && a[1] === b[1]);
+const dur = m => m <= 0 ? "0" : (m % 60 ? `${m / 60 | 0}h${pad(m % 60)}` : `${m / 60}h`);
 
-// ---------- Sheet → dữ liệu ----------
-function readSheet(rows) {
-  const hi = rows.findIndex(r => r && r.some(c => (c || "").trim() === "Mã NV"));
-  if (hi < 0) throw new Error("Không tìm thấy dòng tiêu đề có cột “Mã NV” trong sheet");
+// ---------- Excel ----------
+const wbCache = new Map();
+async function loadWorkbook(f) {
+  if (wbCache.has(f)) return wbCache.get(f);
+  if (!window.XLSX) throw new Error("Chưa tải được thư viện đọc Excel (cần mạng khi mở trang)");
+  const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+  wbCache.set(f, wb);
+  return wb;
+}
+// Ô Excel → chữ. Ngày (số serial) → dd/mm/yyyy, giờ (phần lẻ của ngày) → HH:MM
+function cellText(v) {
+  if (typeof v === "number") {
+    if (v >= 20000 && v < 80000) { const d = XLSX.SSF.parse_date_code(v); return `${pad(d.d)}/${pad(d.m)}/${d.y}`; }
+    if (v > 0 && v < 1) { const t = Math.round(v * 1440); return hm(t); }
+    return String(v);
+  }
+  return v == null ? "" : String(v);
+}
+function sheetRows(wb, name) {
+  return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" }).map(r => r.map(cellText));
+}
+function findSheet(wbs, test, label) {
+  for (const wb of wbs) {
+    const n = wb.SheetNames.find(s => test(norm(s)));
+    if (n) return { wb, name: n };
+  }
+  throw new Error(`Không tìm thấy sheet ${label}`);
+}
+
+// ---------- Form OT → dữ liệu ----------
+function readForm(rows, month, year) {
+  const hi = rows.findIndex(r => r.some(c => norm(c) === "ma nv"));
+  if (hi < 0) throw new Error("Form OT: không tìm thấy dòng tiêu đề có cột “Mã NV”");
   const hdr = rows[hi];
-  const iMa = hdr.findIndex(c => (c || "").trim() === "Mã NV");
+  const iMa = hdr.findIndex(c => norm(c) === "ma nv");
   const iTen = iMa + 1, iBp = iMa + 2;
-  let month = null, year = null; const dayCols = {};
+  const dayCols = {};
   hdr.forEach((h, i) => {
-    const m = (h || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (!m) return;
-    if (month == null) { month = +m[2]; year = +m[3]; }
-    if (+m[2] === month && +m[3] === year && !(+m[1] in dayCols)) dayCols[+m[1]] = i;
+    const m = String(h).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m && +m[2] === month && +m[3] === year && !(+m[1] in dayCols)) dayCols[+m[1]] = i;
   });
-  if (month == null) throw new Error("Không đọc được các cột ngày (dd/mm/yyyy) trong sheet");
+  if (!Object.keys(dayCols).length) throw new Error(`Form OT: không thấy cột ngày nào của tháng ${month}/${year}`);
 
   const people = [];
   for (const r of rows.slice(hi + 1)) {
-    if (!r || !/^HG\d+/.test((r[iMa] || "").trim())) continue;
-    const full = (r[iTen] || "").trim(), dept = (r[iBp] || "").trim();
+    if (!/^HG\d+/i.test(String(r[iMa]).trim())) continue;
+    const full = String(r[iTen]).trim(), dept = String(r[iBp]).trim();
     const parts = norm(full).split(/\s+/);
     let suffix = "";
     if (["art", "dev"].includes(parts[parts.length - 1])) suffix = " " + parts.pop();
@@ -185,22 +166,22 @@ function readSheet(rows) {
     const alt = p2[p2.length - 1] + p2.slice(0, -1).map(p => p[0]).join("");
     const days = {};
     for (const [d, c] of Object.entries(dayCols)) {
-      const v = (r[c] || "").trim();
+      const v = String(r[c]).trim();
       if (v) days[d] = parseRange(v) || v;
     }
-    people.push({ code: r[iMa].trim(), full, dept, base, suffix, alt, days });
+    people.push({ code: String(r[iMa]).trim().toUpperCase(), full, dept, base, suffix, alt, days });
   }
-  // trùng mã (vd 2 người DatLT) → người bộ phận Art/Animation thêm " art"
+  // trùng mã viết tắt (vd 2 người DatLT) → người bộ phận Art/Animation thêm " art"
   const cnt = {};
   people.forEach(p => { const k = p.base + p.suffix; cnt[k] = (cnt[k] || 0) + 1; });
   const sheet = {}, alias = {};
   for (const p of people) {
     let k = p.base + p.suffix;
     if (cnt[k] > 1 && !p.suffix && /artist|animation/i.test(p.dept)) k = p.base + " art";
-    sheet[k] = { name: `${p.full} (${p.code})`, days: p.days };
+    sheet[k] = { name: `${p.full} (${p.code})`, code: p.code, days: p.days };
     if (!p.suffix && !(p.alt in alias)) alias[p.alt] = k;
   }
-  return { sheet, alias, month, year };
+  return { sheet, alias };
 }
 
 // ---------- Chat → dữ liệu ----------
@@ -211,13 +192,11 @@ function readChat(text, month, year, sheet, alias) {
   for (let line of text.split("\n")) {
     line = line.replace(/\r$/, "").replace(/‎/g, "");
     const m = line.match(MSG);
-    if (m) msgs.push({ y: +m[6], mo: +m[5], d: +m[4], ts: `${m[1]}:${m[2]} ${m[4]}/${m[5]}`, sender: m[7].trim(), lines: [m[8]] });
+    if (m) msgs.push({ y: +m[6], mo: +m[5], ts: `${m[1]}:${m[2]} ${m[4]}/${m[5]}`, sender: m[7].trim(), lines: [m[8]] });
     else if (msgs.length) msgs[msgs.length - 1].lines.push(line);
   }
-  // lấy tin từ tháng trước (có thể đăng ký trước cho ngày đầu tháng) đến hết tháng sau
-  const prev = month === 1 ? [yy - 1, 12] : [yy, month - 1];
-  const keyOf = m => m.y * 100 + m.mo;
-  const from = prev[0] * 100 + prev[1];
+  // lấy tin từ tháng trước (có người đăng ký trước cho ngày đầu tháng)
+  const prev = month === 1 ? (yy - 1) * 100 + 12 : yy * 100 + month - 1;
 
   const HEADER = /team\s+([^\d*]*?)\s*-?\s*(\d{1,2})\/(\d{1,2})/i;
   const ENTRY = new RegExp("([A-Za-z][A-Za-z ]*?)\\s*:?\\s+" + TIME_SRC);
@@ -236,7 +215,7 @@ function readChat(text, month, year, sheet, alias) {
     const name = norm(toks[toks.length - 1]);
     let k = name + suffix;
     if (!suffix) {
-      if (/art/i.test(norm(team || "")) && sheet[name + " art"]) k = name + " art";
+      if (/art/.test(norm(team || "")) && sheet[name + " art"]) k = name + " art";
       else if (!sheet[name] && sheet[name + " dev"]) k = name + " dev";
       else if (!sheet[name] && sheet[name + " art"]) k = name + " art";
     }
@@ -245,10 +224,10 @@ function readChat(text, month, year, sheet, alias) {
   };
 
   for (const msg of msgs) {
-    if (keyOf(msg) < from) continue;
+    if (msg.y * 100 + msg.mo < prev) continue;
     const text = msg.lines.join("\n");
     // Tin nhắn tự do đã biết (không theo mẫu)
-    if (/a Thụy hủy OT t7 và CN/.test(text)) {
+    if (month === 11 && year === 2026 && /a Thụy hủy OT t7 và CN/.test(text)) {
       set("thuynv", 7, null, msg.ts);
       set("thuynv", 8, [9 * 60 + 30, 17 * 60], msg.ts);
       continue;
@@ -271,19 +250,54 @@ function readChat(text, month, year, sheet, alias) {
   return { chat, src };
 }
 
-// ---------- So sánh ----------
-const KINDS = {
-  SAI:   "Sai giờ",
-  TRONG: "Có trong chat, sheet trống",
-  HUY:   "Chat báo hủy, sheet vẫn còn",
-  THUA:  "Có trên sheet, không có trong chat",
-  LA:    "Tên trong chat không có trên sheet",
-};
+// ---------- Bảng công → dữ liệu ----------
+function readCong(rows, month, year) {
+  const hi = rows.findIndex(r => r.some(c => norm(c) === "ma nv"));
+  if (hi < 0) throw new Error("Bảng công: không tìm thấy dòng tiêu đề có cột “MÃ NV”");
+  const hdr = rows[hi];
+  const iMa = hdr.findIndex(c => norm(c) === "ma nv");
+  const inRow = rows.slice(hi, hi + 6).find(r => r.some(c => norm(c) === "in"));
+  if (!inRow) throw new Error("Bảng công: không tìm thấy dòng tiêu đề IN / OUT");
+  // cột ngày: ô ngày nằm ở dòng tiêu đề, IN/OUT nằm ở dòng dưới cùng cột
+  const cols = {};
+  let curDay = null;
+  for (let i = 0; i < hdr.length; i++) {
+    const m = String(hdr[i]).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) curDay = (+m[2] === month && +m[3] === year) ? +m[1] : null;
+    if (curDay == null) continue;
+    const lab = norm(inRow[i]);
+    if (lab === "in") (cols[curDay] = cols[curDay] || {}).in = i;
+    if (lab === "out") (cols[curDay] = cols[curDay] || {}).out = i;
+  }
+  if (!Object.keys(cols).length) throw new Error(`Bảng công: không thấy cột ngày nào của tháng ${month}/${year}`);
+  const toMin = v => { const m = String(v).match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
+  const people = {};
+  let lastDay = 0; // ngày cuối cùng đã có checkout (sau đó là chưa có dữ liệu)
+  for (const r of rows.slice(hi + 1)) {
+    const code = String(r[iMa] || "").trim().toUpperCase();
+    if (!/^HG\d+/.test(code)) continue;
+    const days = {};
+    for (const [d, c] of Object.entries(cols)) {
+      const tin = toMin(r[c.in]), tout = toMin(r[c.out]);
+      if (tin != null || tout != null) days[d] = { in: tin, out: tout };
+      if (tout != null) lastDay = Math.max(lastDay, +d);
+    }
+    people[code] = { name: String(r[iMa + 1] || "").trim(), days };
+  }
+  return { people, lastDay };
+}
 
-function compare(sheet, chat, src) {
+// ---------- So sánh ① chat ↔ form ----------
+const KIND_CHAT = {
+  SAI:   ["Sai giờ", "bad"],
+  TRONG: ["Có trong chat, form trống", "bad"],
+  HUY:   ["Chat báo hủy, form vẫn còn", "warn"],
+  THUA:  ["Có trên form, không có trong chat", "warn"],
+  LA:    ["Tên trong chat không có trên form", "info"],
+};
+function compareChat(sheet, chat, src) {
   const out = []; let ok = 0;
-  const keys = new Set([...Object.keys(sheet), ...Object.keys(chat)]);
-  for (const k of keys) {
+  for (const k of new Set([...Object.keys(sheet), ...Object.keys(chat)])) {
     const sd = (sheet[k] || {}).days || {}, cd = chat[k] || {};
     for (const d of new Set([...Object.keys(sd), ...Object.keys(cd)])) {
       const inChat = d in cd, cv = cd[d], sv = sd[d];
@@ -296,36 +310,73 @@ function compare(sheet, chat, src) {
       else kind = "SAI";
       if (kind === "LA" && cv == null) continue;
       out.push({ day: +d, who: sheet[k] ? sheet[k].name : k, kind,
-                 chat: inChat ? (cv == null ? "hủy" : fmt(cv)) : "-",
-                 sheet: typeof sv === "string" ? sv : fmt(sv),
-                 src: ((src[k] || {})[d] || []).join(", ") || "-" });
+        cells: [inChat ? (cv == null ? "hủy" : fmt(cv)) : "-", typeof sv === "string" ? sv : fmt(sv),
+                ((src[k] || {})[d] || []).join(", ") || "-"] });
     }
   }
-  out.sort((a, b) => a.day - b.day || a.who.localeCompare(b.who, "vi"));
+  return { out, ok };
+}
+
+// ---------- So sánh ② form ↔ chấm công ----------
+const KIND_CONG = {
+  MUON:   ["Đến muộn", "bad"],
+  SOM:    ["Về sớm", "bad"],
+  CA2:    ["Đến muộn + về sớm", "bad"],
+  NOOUT:  ["Thiếu checkout", "warn"],
+  NOIN:   ["Thiếu checkin", "warn"],
+  VANG:   ["Không có chấm công", "bad"],
+  NOEMP:  ["Không có trong bảng công", "info"],
+  NOREAD: ["Không đọc được giờ OT", "info"],
+};
+function compareCong(sheet, cong) {
+  const out = []; let ok = 0;
+  for (const p of Object.values(sheet)) {
+    for (const [dStr, reg] of Object.entries(p.days)) {
+      const d = +dStr;
+      if (d > cong.lastDay) continue; // chưa có dữ liệu chấm công
+      const att = cong.people[p.code];
+      const row = (kind, a = {}, real = "-") => out.push({ day: d, who: p.name, kind,
+        cells: [typeof reg === "string" ? reg : fmt(reg), a.in != null ? hm(a.in) : "-", a.out != null ? hm(a.out) : "-", real] });
+      if (typeof reg === "string") { row("NOREAD"); continue; }
+      if (!att) { row("NOEMP"); continue; }
+      const a = att.days[d];
+      if (!a) { row("VANG"); continue; }
+      if (a.out == null) { row("NOOUT", a); continue; }
+      if (a.in == null) { row("NOIN", a); continue; }
+      const [s, e] = reg;
+      const late = a.in > s ? a.in - s : 0, early = a.out < e ? e - a.out : 0;
+      const real = Math.max(0, Math.min(e, a.out) - Math.max(s, a.in));
+      if (!late && !early) { ok++; continue; }
+      const kind = late && early ? "CA2" : late ? "MUON" : "SOM";
+      const note = [late ? `muộn ${late}p` : "", early ? `sớm ${early}p` : ""].filter(Boolean).join(", ");
+      row(kind, a, `${dur(real)} / ${dur(e - s)} (${note})`);
+    }
+  }
   return { out, ok };
 }
 
 // ---------- UI ----------
-let lastResult = null, filter = null;
-
-function render(month) {
-  const { out, ok } = lastResult;
-  const counts = {};
-  out.forEach(r => counts[r.kind] = (counts[r.kind] || 0) + 1);
-  const pills = [`<span class="pill" style="cursor:default">Khớp <b style="color:var(--ok)">${ok}</b></span>`,
-    `<button class="pill ${filter ? "" : "active"}" data-k="">Tất cả lệch <b>${out.length}</b></button>`];
-  for (const [k, label] of Object.entries(KINDS)) if (counts[k])
-    pills.push(`<button class="pill ${filter === k ? "active" : ""}" data-k="${k}">${label} <b>${counts[k]}</b></button>`);
-  $("summary").innerHTML = pills.join("");
-  $("summary").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.k || null; render(month); });
-  const rows = out.filter(r => !filter || r.kind === filter);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr>
-      <td class="mono">${pad(r.day)}/${pad(month)}</td><td>${esc(r.who)}</td>
-      <td class="k ${r.kind}">${KINDS[r.kind]}</td>
-      <td class="mono">${esc(r.chat)}</td><td class="mono">${esc(r.sheet)}</td>
-      <td class="mono">${esc(r.src)}</td></tr>`).join("")
-    : `<tr><td colspan="6" class="empty">Khớp hết ✓</td></tr>`;
-  $("resultCard").hidden = false;
+function renderTable(prefix, res, kinds, month, ncol) {
+  let filter = null;
+  const draw = () => {
+    const counts = {};
+    res.out.forEach(r => counts[r.kind] = (counts[r.kind] || 0) + 1);
+    const pills = [`<span class="pill static">Khớp <b style="color:var(--ok)">${res.ok}</b></span>`,
+      `<button class="pill ${filter ? "" : "active"}" data-k="">Tất cả lỗi <b>${res.out.length}</b></button>`];
+    for (const [k, [label]] of Object.entries(kinds)) if (counts[k])
+      pills.push(`<button class="pill ${filter === k ? "active" : ""}" data-k="${k}">${label} <b>${counts[k]}</b></button>`);
+    $("sum" + prefix).innerHTML = pills.join("");
+    $("sum" + prefix).querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.k || null; draw(); });
+    const rows = res.out.filter(r => !filter || r.kind === filter);
+    $("tb" + prefix).innerHTML = rows.length ? rows.map(r => `<tr>
+        <td class="mono">${pad(r.day)}/${pad(month)}</td><td>${esc(r.who)}</td>
+        <td class="k ${kinds[r.kind][1]}">${kinds[r.kind][0]}</td>
+        ${r.cells.map(c => `<td class="mono">${esc(c)}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="${ncol}" class="empty">Khớp hết ✓</td></tr>`;
+  };
+  res.out.sort((a, b) => a.day - b.day || a.who.localeCompare(b.who, "vi"));
+  draw();
+  $("card" + prefix).hidden = false;
 }
 
 function setCheck(t, cls) { const s = $("checkStatus"); s.textContent = t; s.className = "status " + (cls || ""); }
@@ -333,17 +384,36 @@ function setCheck(t, cls) { const s = $("checkStatus"); s.textContent = t; s.cla
 $("checkBtn").onclick = async () => {
   const btn = $("checkBtn");
   try {
-    const cf = $("chatFile").files[0];
-    if (!cf) throw new Error("Chưa chọn file chat .txt");
+    const chatF = $("chatFile").files[0], formF = $("formFile").files[0], congF = $("congFile").files[0];
+    if (!chatF) throw new Error("Chưa chọn file chat .txt");
+    if (!formF) throw new Error("Chưa chọn file Form đăng ký OT");
+    if (!congF) throw new Error("Chưa chọn file Bảng công");
+    const mv = $("month").value.match(/^(\d{4})-(\d{2})$/);
+    if (!mv) throw new Error("Chưa chọn tháng");
+    const year = +mv[1], month = +mv[2];
     btn.disabled = true; setCheck("Đang đọc dữ liệu…");
-    $("checkStatus").dataset.sheet = "";
-    const rows = await readCompanyRows();
-    const { sheet, alias, month, year } = readSheet(rows);
-    const { chat, src } = readChat(await cf.text(), month, year, sheet, alias);
-    lastResult = compare(sheet, chat, src); filter = null;
-    render(month);
-    const sh = $("checkStatus").dataset.sheet;
-    setCheck(`Đã check ${sh ? "sheet “" + sh + "”, " : ""}tháng ${month}/${year}: ${lastResult.out.length} chỗ lệch`, lastResult.out.length ? "" : "ok");
+    $("cardChat").hidden = $("cardCong").hidden = true;
+
+    const wbs = [await loadWorkbook(formF), await loadWorkbook(congF)]; // chọn nhầm ô cũng được
+    const fs = findSheet(wbs, n => { const m = n.match(/^(\d{4})\.\s*thang\s*(\d{1,2})$/); return m && +m[1] === year && +m[2] === month; },
+      `“${year}.Tháng ${month}” trong Form đăng ký OT`);
+    const cs = findSheet(wbs, n => { const m = n.match(/t(\d{1,2})\.(\d{4})\s*$/); return n.startsWith("cong") && m && +m[1] === month && +m[2] === year; },
+      `“CÔNG CHI TIẾT T${month}.${year}” trong Bảng công`);
+
+    const { sheet, alias } = readForm(sheetRows(fs.wb, fs.name), month, year);
+    const { chat, src } = readChat(await chatF.text(), month, year, sheet, alias);
+    const r1 = compareChat(sheet, chat, src);
+    renderTable("Chat", r1, KIND_CHAT, month, 6);
+
+    const cong = readCong(sheetRows(cs.wb, cs.name), month, year);
+    const r2 = compareCong(sheet, cong);
+    $("congNote").textContent = cong.lastDay
+      ? `Bảng công có dữ liệu đến ngày ${pad(cong.lastDay)}/${pad(month)}; các ngày sau đó chưa check. Đến muộn = checkin sau giờ bắt đầu OT, về sớm = checkout trước giờ kết thúc OT.`
+      : "Bảng công chưa có dữ liệu checkout nào trong tháng này.";
+    renderTable("Cong", r2, KIND_CONG, month, 7);
+
+    setCheck(`Đã check tháng ${month}/${year} (sheet “${fs.name}” + “${cs.name}”): ${r1.out.length} lỗi chat↔form, ${r2.out.length} lỗi chấm công`,
+      r1.out.length + r2.out.length ? "" : "ok");
   } catch (e) {
     setCheck(e.message, "err");
   } finally { btn.disabled = false; }
