@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check giờ OT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e6ec;
+          --accent:#1a73e8; --ok:#1e8e3e; --bad:#d93025; --warn:#e37400; --info:#5f6368; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px; }
+  label { display:block; font-weight:600; margin:0 0 6px; }
+  .hint { color:var(--muted); font-size:13px; font-weight:400; }
+  .field { margin-bottom:14px; }
+  input[type=text], input[type=url] { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:7px; font:inherit; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .row > .field { flex:1 1 260px; }
+  button { font:inherit; border-radius:7px; padding:9px 16px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:11px 28px; }
+  button:disabled { opacity:.55; cursor:default; }
+  .status { font-size:14px; color:var(--muted); }
+  .status.ok { color:var(--ok); } .status.err { color:var(--bad); }
+  details summary { cursor:pointer; color:var(--muted); font-size:14px; }
+  .summary { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .pill { border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:14px; background:#fff; cursor:pointer; }
+  .pill.active { border-color:var(--accent); background:#e8f0fe; }
+  .pill b { margin-left:4px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#fafbfc; font-weight:600; position:sticky; top:0; }
+  .tbl { overflow-x:auto; }
+  .k { font-weight:600; white-space:nowrap; }
+  .k.SAI { color:var(--bad); } .k.TRONG { color:var(--bad); } .k.HUY { color:var(--warn); }
+  .k.THUA { color:var(--warn); } .k.LA { color:var(--info); }
+  .mono { font-family: ui-monospace, Consolas, monospace; white-space:nowrap; }
+  .empty { text-align:center; color:var(--ok); padding:24px; font-weight:600; }
+  .err-box { color:var(--bad); white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Check giờ OT</h1>
+  <p class="sub">So giờ đăng ký trong nhóm chat với sheet công ty. Mỗi người, mỗi ngày lấy tin nhắn <b>cuối cùng</b> (update / fix / hủy).</p>
+
+  <div class="card">
+    <div class="field">
+      <label for="chatFile">1. File chat (.txt) <span class="hint">— xuất từ nhóm “Team đăng kí OT”</span></label>
+      <input type="file" id="chatFile" accept=".txt,text/plain">
+    </div>
+
+    <div class="field">
+      <label for="xlsFile">2. File Excel của công ty <span class="hint">— .xlsx (hoặc .csv)</span></label>
+      <input type="file" id="xlsFile" accept=".xlsx,.xls,.csv">
+    </div>
+
+    <div class="field">
+      <label for="sheetName">3. Tên sheet <span class="hint">— để trống sẽ lấy sheet đầu tiên</span></label>
+      <input type="text" id="sheetName" list="sheetList" placeholder="(sheet đầu tiên)">
+      <datalist id="sheetList"></datalist>
+    </div>
+
+    <button id="checkBtn" class="primary" type="button">Check</button>
+    <span id="checkStatus" class="status" style="margin-left:12px"></span>
+  </div>
+
+  <div class="card" id="resultCard" hidden>
+    <div class="summary" id="summary"></div>
+    <div class="tbl"><table>
+      <thead><tr><th>Ngày</th><th>Người</th><th>Lỗi</th><th>Chat</th><th>Sheet</th><th>Tin nhắn</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------- Excel ----------
+let workbook = null, wbFile = null;
+async function loadWorkbook(f) {
+  if (wbFile === f && workbook) return workbook;
+  if (!window.XLSX) throw new Error("Chưa tải được thư viện đọc Excel (cần mạng lần đầu mở trang)");
+  workbook = XLSX.read(await f.arrayBuffer(), { type: "array", cellDates: true });
+  wbFile = f;
+  return workbook;
+}
+function cellText(v) {
+  if (v instanceof Date) {
+    const d = new Date(v.getTime() + 12 * 3600e3); // tránh lệch vài giây/múi giờ
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+  return v == null ? "" : String(v);
+}
+async function readCompanyRows() {
+  const f = $("xlsFile").files[0];
+  if (!f) throw new Error("Chưa chọn file Excel của công ty");
+  if (/\.csv$/i.test(f.name)) return parseCSV(await f.text());
+  const wb = await loadWorkbook(f);
+  const want = $("sheetName").value.trim();
+  let name = wb.SheetNames[0];
+  if (want) {
+    name = wb.SheetNames.find(n => n === want) || wb.SheetNames.find(n => norm(n) === norm(want));
+    if (!name) throw new Error(`Không có sheet “${want}”. Các sheet: ${wb.SheetNames.join(", ")}`);
+  }
+  $("checkStatus").dataset.sheet = name;
+  return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" })
+    .map(r => r.map(cellText));
+}
+$("xlsFile").addEventListener("change", async () => {
+  const f = $("xlsFile").files[0];
+  $("sheetList").innerHTML = "";
+  if (!f || /\.csv$/i.test(f.name)) return;
+  try {
+    const wb = await loadWorkbook(f);
+    $("sheetList").innerHTML = wb.SheetNames.map(n => `<option value="${esc(n)}">`).join("");
+  } catch (e) { setCheck(e.message, "err"); }
+});
+
+// ---------- CSV ----------
+function parseCSV(text) {
+  const rows = []; let row = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur.replace(/\r$/, "")); rows.push(row); row = []; cur = ""; }
+    else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+// ---------- helpers ----------
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function norm(s) {
+  return s.replace(/Đ/g, "D").replace(/đ/g, "d").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+function parseTime(h, m) {
+  m = (m || "0").slice(0, 2);
+  return parseInt(h, 10) * 60 + (m ? parseInt(m.padEnd(2, "0"), 10) : 0);
+}
+const TIME_SRC = "(\\d{1,2})(?:[hH:](\\d{0,3}))?\\s*-\\s*(\\d{1,2})(?:[hH:](\\d{0,3}))?";
+function parseRange(s) {
+  const m = s.match(new RegExp(TIME_SRC));
+  return m ? [parseTime(m[1], m[2]), parseTime(m[3], m[4])] : null;
+}
+const pad = n => String(n).padStart(2, "0");
+const fmt = r => r == null ? "(trống)" : `${pad(r[0] / 60 | 0)}:${pad(r[0] % 60)}-${pad(r[1] / 60 | 0)}:${pad(r[1] % 60)}`;
+const same = (a, b) => (a == null && b == null) || (a && b && a[0] === b[0] && a[1] === b[1]);
+
+// ---------- Sheet → dữ liệu ----------
+function readSheet(rows) {
+  const hi = rows.findIndex(r => r && r.some(c => (c || "").trim() === "Mã NV"));
+  if (hi < 0) throw new Error("Không tìm thấy dòng tiêu đề có cột “Mã NV” trong sheet");
+  const hdr = rows[hi];
+  const iMa = hdr.findIndex(c => (c || "").trim() === "Mã NV");
+  const iTen = iMa + 1, iBp = iMa + 2;
+  let month = null, year = null; const dayCols = {};
+  hdr.forEach((h, i) => {
+    const m = (h || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) return;
+    if (month == null) { month = +m[2]; year = +m[3]; }
+    if (+m[2] === month && +m[3] === year && !(+m[1] in dayCols)) dayCols[+m[1]] = i;
+  });
+  if (month == null) throw new Error("Không đọc được các cột ngày (dd/mm/yyyy) trong sheet");
+
+  const people = [];
+  for (const r of rows.slice(hi + 1)) {
+    if (!r || !/^HG\d+/.test((r[iMa] || "").trim())) continue;
+    const full = (r[iTen] || "").trim(), dept = (r[iBp] || "").trim();
+    const parts = norm(full).split(/\s+/);
+    let suffix = "";
+    if (["art", "dev"].includes(parts[parts.length - 1])) suffix = " " + parts.pop();
+    const base = parts[parts.length - 1] + parts.slice(0, -1).map(p => p[0]).join("");
+    const p2 = parts.filter(p => p !== "thi");
+    const alt = p2[p2.length - 1] + p2.slice(0, -1).map(p => p[0]).join("");
+    const days = {};
+    for (const [d, c] of Object.entries(dayCols)) {
+      const v = (r[c] || "").trim();
+      if (v) days[d] = parseRange(v) || v;
+    }
+    people.push({ code: r[iMa].trim(), full, dept, base, suffix, alt, days });
+  }
+  // trùng mã (vd 2 người DatLT) → người bộ phận Art/Animation thêm " art"
+  const cnt = {};
+  people.forEach(p => { const k = p.base + p.suffix; cnt[k] = (cnt[k] || 0) + 1; });
+  const sheet = {}, alias = {};
+  for (const p of people) {
+    let k = p.base + p.suffix;
+    if (cnt[k] > 1 && !p.suffix && /artist|animation/i.test(p.dept)) k = p.base + " art";
+    sheet[k] = { name: `${p.full} (${p.code})`, days: p.days };
+    if (!p.suffix && !(p.alt in alias)) alias[p.alt] = k;
+  }
+  return { sheet, alias, month, year };
+}
+
+// ---------- Chat → dữ liệu ----------
+function readChat(text, month, year, sheet, alias) {
+  const yy = year % 100;
+  const MSG = /^\[(\d{1,2}):(\d{2}):(\d{2}) (\d{1,2})\/(\d{1,2})\/(\d{2})\] ([^:]+): ?(.*)$/;
+  const msgs = [];
+  for (let line of text.split("\n")) {
+    line = line.replace(/\r$/, "").replace(/‎/g, "");
+    const m = line.match(MSG);
+    if (m) msgs.push({ y: +m[6], mo: +m[5], d: +m[4], ts: `${m[1]}:${m[2]} ${m[4]}/${m[5]}`, sender: m[7].trim(), lines: [m[8]] });
+    else if (msgs.length) msgs[msgs.length - 1].lines.push(line);
+  }
+  // lấy tin từ tháng trước (có thể đăng ký trước cho ngày đầu tháng) đến hết tháng sau
+  const prev = month === 1 ? [yy - 1, 12] : [yy, month - 1];
+  const keyOf = m => m.y * 100 + m.mo;
+  const from = prev[0] * 100 + prev[1];
+
+  const HEADER = /team\s+([^\d*]*?)\s*-?\s*(\d{1,2})\/(\d{1,2})/i;
+  const ENTRY = new RegExp("([A-Za-z][A-Za-z ]*?)\\s*:?\\s+" + TIME_SRC);
+  const CANCEL = /\b([A-Z][a-z]+[A-Z]{2,3})\s+hủy/;
+
+  const chat = {}, src = {}, ctxBySender = {};
+  const set = (k, day, val, ts) => {
+    (chat[k] = chat[k] || {})[day] = val;
+    ((src[k] = src[k] || {})[day] = src[k][day] || []).push(ts);
+  };
+  const chatKey = (raw, team) => {
+    const toks = raw.trim().split(/\s+/);
+    let suffix = "";
+    if (toks.length > 1 && ["dev", "art"].includes(toks[toks.length - 1].toLowerCase())) suffix = " " + toks.pop().toLowerCase();
+    if (toks.length > 1 && /^[A-Z]{2,3}$/.test(toks[toks.length - 1])) { const t = toks.pop(); toks[toks.length - 1] += t; } // "Dung VT"
+    const name = norm(toks[toks.length - 1]);
+    let k = name + suffix;
+    if (!suffix) {
+      if (/art/i.test(norm(team || "")) && sheet[name + " art"]) k = name + " art";
+      else if (!sheet[name] && sheet[name + " dev"]) k = name + " dev";
+      else if (!sheet[name] && sheet[name + " art"]) k = name + " art";
+    }
+    if (!sheet[k] && alias[k]) k = alias[k];
+    return k;
+  };
+
+  for (const msg of msgs) {
+    if (keyOf(msg) < from) continue;
+    const text = msg.lines.join("\n");
+    // Tin nhắn tự do đã biết (không theo mẫu)
+    if (/a Thụy hủy OT t7 và CN/.test(text)) {
+      set("thuynv", 7, null, msg.ts);
+      set("thuynv", 8, [9 * 60 + 30, 17 * 60], msg.ts);
+      continue;
+    }
+    let ctx = ctxBySender[msg.sender];
+    for (let line of msg.lines) {
+      const h = line.match(HEADER);
+      if (h) {
+        ctx = { team: h[1], day: +h[2], month: +h[3] };
+        ctxBySender[msg.sender] = ctx;
+        line = line.slice(h.index + h[0].length);
+      }
+      if (!ctx || ctx.month !== month) continue;
+      const c = line.match(CANCEL);
+      if (c) { set(chatKey(c[1], ctx.team), ctx.day, null, msg.ts); continue; }
+      const e = line.match(ENTRY);
+      if (e) set(chatKey(e[1], ctx.team), ctx.day, [parseTime(e[2], e[3]), parseTime(e[4], e[5])], msg.ts);
+    }
+  }
+  return { chat, src };
+}
+
+// ---------- So sánh ----------
+const KINDS = {
+  SAI:   "Sai giờ",
+  TRONG: "Có trong chat, sheet trống",
+  HUY:   "Chat báo hủy, sheet vẫn còn",
+  THUA:  "Có trên sheet, không có trong chat",
+  LA:    "Tên trong chat không có trên sheet",
+};
+
+function compare(sheet, chat, src) {
+  const out = []; let ok = 0;
+  const keys = new Set([...Object.keys(sheet), ...Object.keys(chat)]);
+  for (const k of keys) {
+    const sd = (sheet[k] || {}).days || {}, cd = chat[k] || {};
+    for (const d of new Set([...Object.keys(sd), ...Object.keys(cd)])) {
+      const inChat = d in cd, cv = cd[d], sv = sd[d];
+      let kind;
+      if (!sheet[k]) kind = "LA";
+      else if (!inChat) kind = "THUA";
+      else if (same(cv, sv)) { if (cv) ok++; continue; }
+      else if (cv == null) kind = "HUY";
+      else if (sv == null) kind = "TRONG";
+      else kind = "SAI";
+      if (kind === "LA" && cv == null) continue;
+      out.push({ day: +d, who: sheet[k] ? sheet[k].name : k, kind,
+                 chat: inChat ? (cv == null ? "hủy" : fmt(cv)) : "-",
+                 sheet: typeof sv === "string" ? sv : fmt(sv),
+                 src: ((src[k] || {})[d] || []).join(", ") || "-" });
+    }
+  }
+  out.sort((a, b) => a.day - b.day || a.who.localeCompare(b.who, "vi"));
+  return { out, ok };
+}
+
+// ---------- UI ----------
+let lastResult = null, filter = null;
+
+function render(month) {
+  const { out, ok } = lastResult;
+  const counts = {};
+  out.forEach(r => counts[r.kind] = (counts[r.kind] || 0) + 1);
+  const pills = [`<span class="pill" style="cursor:default">Khớp <b style="color:var(--ok)">${ok}</b></span>`,
+    `<button class="pill ${filter ? "" : "active"}" data-k="">Tất cả lệch <b>${out.length}</b></button>`];
+  for (const [k, label] of Object.entries(KINDS)) if (counts[k])
+    pills.push(`<button class="pill ${filter === k ? "active" : ""}" data-k="${k}">${label} <b>${counts[k]}</b></button>`);
+  $("summary").innerHTML = pills.join("");
+  $("summary").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.k || null; render(month); });
+  const rows = out.filter(r => !filter || r.kind === filter);
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr>
+      <td class="mono">${pad(r.day)}/${pad(month)}</td><td>${esc(r.who)}</td>
+      <td class="k ${r.kind}">${KINDS[r.kind]}</td>
+      <td class="mono">${esc(r.chat)}</td><td class="mono">${esc(r.sheet)}</td>
+      <td class="mono">${esc(r.src)}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="empty">Khớp hết ✓</td></tr>`;
+  $("resultCard").hidden = false;
+}
+
+function setCheck(t, cls) { const s = $("checkStatus"); s.textContent = t; s.className = "status " + (cls || ""); }
+
+$("checkBtn").onclick = async () => {
+  const btn = $("checkBtn");
+  try {
+    const cf = $("chatFile").files[0];
+    if (!cf) throw new Error("Chưa chọn file chat .txt");
+    btn.disabled = true; setCheck("Đang đọc dữ liệu…");
+    $("checkStatus").dataset.sheet = "";
+    const rows = await readCompanyRows();
+    const { sheet, alias, month, year } = readSheet(rows);
+    const { chat, src } = readChat(await cf.text(), month, year, sheet, alias);
+    lastResult = compare(sheet, chat, src); filter = null;
+    render(month);
+    const sh = $("checkStatus").dataset.sheet;
+    setCheck(`Đã check ${sh ? "sheet “" + sh + "”, " : ""}tháng ${month}/${year}: ${lastResult.out.length} chỗ lệch`, lastResult.out.length ? "" : "ok");
+  } catch (e) {
+    setCheck(e.message, "err");
+  } finally { btn.disabled = false; }
+};
+</script>
+</body>
+</html>
