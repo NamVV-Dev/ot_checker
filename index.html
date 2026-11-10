@@ -74,7 +74,7 @@
       <details id="cidBox" style="margin-top:10px">
         <summary>OAuth Client ID (đã điền sẵn, thường không cần sửa)</summary>
         <input type="text" id="clientId" placeholder="xxxxxxxx.apps.googleusercontent.com" style="margin-top:8px">
-        <div class="hint" style="margin-top:6px">Client ID loại Web application, “Authorized JavaScript origins” = <span class="mono">http://localhost:8000</span>, project đã bật <b>Google Drive API</b>.</div>
+        <div class="hint" style="margin-top:6px">Client ID loại Web application, “Authorized JavaScript origins” gồm <span class="mono">https://namvv-dev.github.io</span> và <span class="mono">http://localhost:8000</span>, project đã bật <b>Google Drive API</b>.</div>
       </details>
     </div>
     <button id="checkBtn" class="primary" type="button">Check</button>
@@ -155,7 +155,7 @@ function getToken(force) {
   if (!force && token && tokenExp > Date.now() + 60e3) return Promise.resolve(token);
   const cid = $("clientId").value.trim();
   if (location.protocol === "file:")
-    return Promise.reject(new Error("Google không cho đăng nhập khi mở file trực tiếp. Hãy mở bằng mo_check_ot.bat (http://localhost:8000)."));
+    return Promise.reject(new Error("Google không cho đăng nhập khi mở file trực tiếp. Hãy mở https://namvv-dev.github.io/ot_checker/ (hoặc mo_check_ot.bat)."));
   if (!cid) { $("cidBox").open = true; return Promise.reject(new Error("Chưa nhập OAuth Client ID (mục Cài đặt ở ô 5)")); }
   if (!window.google || !google.accounts) return Promise.reject(new Error("Chưa tải được thư viện đăng nhập Google, kiểm tra mạng rồi F5"));
   if (!tokenClient || tokenCid !== cid) {
