@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Check giờ OT</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e6ec;
           --accent:#1a73e8; --ok:#1e8e3e; --bad:#d93025; --warn:#e37400; --info:#5f6368; }
@@ -18,6 +19,9 @@
   label { display:block; font-weight:600; margin:0 0 6px; }
   .hint { color:var(--muted); font-size:13px; font-weight:400; }
   .field { margin-bottom:14px; }
+  input[type=url], input[type=text] { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:7px; font:inherit; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  details summary { cursor:pointer; color:var(--muted); font-size:14px; }
   input[type=month] { padding:8px 10px; border:1px solid var(--line); border-radius:7px; font:inherit; }
   button { font:inherit; border-radius:7px; padding:9px 16px; border:1px solid var(--line); background:#fff; cursor:pointer; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:11px 28px; }
@@ -50,16 +54,28 @@
       <input type="file" id="chatFile" accept=".txt,text/plain">
     </div>
     <div class="field">
-      <label for="formFile">2. Form đăng ký OT (.xlsx) <span class="hint">— có các sheet “2026.Tháng 11”…</span></label>
-      <input type="file" id="formFile" accept=".xlsx,.xls">
+      <label for="congUrl">2. Link “BẢNG CÔNG 2026” <span class="hint">— tự nhớ cho lần sau</span></label>
+      <input type="url" id="congUrl" placeholder="https://docs.google.com/spreadsheets/d/...">
     </div>
     <div class="field">
-      <label for="congFile">3. Bảng công (.xlsx) <span class="hint">— có các sheet “CÔNG CHI TIẾT T11.2026”…</span></label>
-      <input type="file" id="congFile" accept=".xlsx,.xls">
+      <label for="formUrl">3. Link “Form đăng ký OT” <span class="hint">— tự nhớ cho lần sau</span></label>
+      <input type="url" id="formUrl" placeholder="https://docs.google.com/spreadsheets/d/...">
     </div>
     <div class="field">
       <label for="month">4. Tháng cần check</label>
       <input type="month" id="month">
+    </div>
+    <div class="field">
+      <label>5. Tài khoản Google <span class="hint">— chỉ xin quyền đọc file</span></label>
+      <div class="row">
+        <button id="loginBtn" type="button">Đăng nhập Google</button>
+        <span id="loginStatus" class="status">Chưa đăng nhập</span>
+      </div>
+      <details id="cidBox" style="margin-top:10px">
+        <summary>OAuth Client ID (đã điền sẵn, thường không cần sửa)</summary>
+        <input type="text" id="clientId" placeholder="xxxxxxxx.apps.googleusercontent.com" style="margin-top:8px">
+        <div class="hint" style="margin-top:6px">Client ID loại Web application, “Authorized JavaScript origins” = <span class="mono">http://localhost:8000</span>, project đã bật <b>Google Drive API</b>.</div>
+      </details>
     </div>
     <button id="checkBtn" class="primary" type="button">Check</button>
     <span id="checkStatus" class="status" style="margin-left:12px"></span>
@@ -111,14 +127,91 @@ const fmt = r => r == null ? "(trống)" : `${hm(r[0])}-${hm(r[1])}`;
 const same = (a, b) => (a == null && b == null) || (a && b && a[0] === b[0] && a[1] === b[1]);
 const dur = m => m <= 0 ? "0" : (m % 60 ? `${m / 60 | 0}h${pad(m % 60)}` : `${m / 60}h`);
 
-// ---------- Excel ----------
-const wbCache = new Map();
-async function loadWorkbook(f) {
-  if (wbCache.has(f)) return wbCache.get(f);
+// ---------- Ghi nhớ input ----------
+const store = {
+  get(k, s = localStorage) { try { return s.getItem(k) || ""; } catch { return ""; } },
+  set(k, v, s = localStorage) { try { s.setItem(k, v); } catch {} }
+};
+// Client ID của project Google Cloud "Check OT" (check-ot, tổ chức higame.com.vn, chế độ Internal)
+const DEFAULT_CLIENT_ID = "463824604331-0alm3bpgr3ei9nf72j8kr2u0gjh0ha0q.apps.googleusercontent.com";
+for (const id of ["congUrl", "formUrl", "clientId"]) {
+  $(id).value = store.get("ot_" + id);
+  $(id).addEventListener("input", () => store.set("ot_" + id, $(id).value.trim()));
+}
+if (!$("clientId").value) $("clientId").value = DEFAULT_CLIENT_ID;
+
+// ---------- Google login (popup chọn tài khoản) ----------
+const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+let token = null, tokenExp = 0, tokenClient = null, tokenCid = "", pending = null;
+try { // giữ token khi F5 trong cùng tab (token sống ~1 giờ)
+  const t = JSON.parse(sessionStorage.getItem("ot_token") || "null");
+  if (t && t.exp > Date.now() + 60e3) { token = t.token; tokenExp = t.exp; }
+} catch {}
+function setLogin(text, cls) { const s = $("loginStatus"); s.textContent = text; s.className = "status " + (cls || ""); }
+if (token) setLogin("Đã đăng nhập ✓", "ok");
+
+// Phải gọi ngay trong sự kiện click (trước mọi await) để trình duyệt cho mở popup
+function getToken(force) {
+  if (!force && token && tokenExp > Date.now() + 60e3) return Promise.resolve(token);
+  const cid = $("clientId").value.trim();
+  if (location.protocol === "file:")
+    return Promise.reject(new Error("Google không cho đăng nhập khi mở file trực tiếp. Hãy mở bằng mo_check_ot.bat (http://localhost:8000)."));
+  if (!cid) { $("cidBox").open = true; return Promise.reject(new Error("Chưa nhập OAuth Client ID (mục Cài đặt ở ô 5)")); }
+  if (!window.google || !google.accounts) return Promise.reject(new Error("Chưa tải được thư viện đăng nhập Google, kiểm tra mạng rồi F5"));
+  if (!tokenClient || tokenCid !== cid) {
+    tokenCid = cid;
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: cid, scope: SCOPE,
+      callback: r => {
+        const p = pending; pending = null;
+        if (r.error) { setLogin("Đăng nhập lỗi: " + r.error, "err"); p && p.reject(new Error("Đăng nhập Google lỗi: " + r.error)); return; }
+        token = r.access_token; tokenExp = Date.now() + (r.expires_in || 3600) * 1000;
+        store.set("ot_token", JSON.stringify({ token, exp: tokenExp }), sessionStorage);
+        setLogin("Đã đăng nhập ✓", "ok"); $("loginBtn").textContent = "Đổi tài khoản";
+        p && p.resolve(token);
+      },
+      error_callback: e => {
+        const p = pending; pending = null;
+        setLogin("Chưa đăng nhập (" + (e.type === "popup_closed" ? "đã đóng popup" : e.type) + ")", "err");
+        p && p.reject(new Error("Chưa đăng nhập Google"));
+      }
+    });
+  }
+  return new Promise((resolve, reject) => {
+    pending = { resolve, reject };
+    tokenClient.requestAccessToken({ prompt: force ? "select_account" : "" });
+  });
+}
+$("loginBtn").onclick = () => getToken(true).catch(e => setLogin(e.message, "err"));
+
+// ---------- Tải file Google Sheet / Excel trên Drive ----------
+function fileId(url) {
+  const m = String(url).match(/\/d\/([a-zA-Z0-9_-]{20,})/) || String(url).match(/[?&]id=([a-zA-Z0-9_-]{20,})/);
+  return m ? m[1] : null;
+}
+async function driveGet(url, tk) {
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + tk } });
+  if (r.status === 401) { token = null; throw new Error("Phiên đăng nhập Google đã hết hạn, bấm Check lại để đăng nhập"); }
+  if (!r.ok) {
+    let msg = r.statusText; try { msg = (await r.json()).error.message; } catch {}
+    if (r.status === 404) msg = "không tìm thấy file hoặc tài khoản này không có quyền xem";
+    if (r.status === 403 && /has not been used|disabled/i.test(msg)) msg = "project chưa bật Google Drive API";
+    throw new Error(msg);
+  }
+  return r;
+}
+async function loadWorkbook(url, label, tk) {
+  const id = fileId(url);
+  if (!id) throw new Error(`Link “${label}” không hợp lệ`);
   if (!window.XLSX) throw new Error("Chưa tải được thư viện đọc Excel (cần mạng khi mở trang)");
-  const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-  wbCache.set(f, wb);
-  return wb;
+  try {
+    const base = `https://www.googleapis.com/drive/v3/files/${id}`;
+    const meta = await (await driveGet(`${base}?fields=mimeType,name&supportsAllDrives=true`, tk)).json();
+    const r = meta.mimeType === "application/vnd.google-apps.spreadsheet"
+      ? await driveGet(`${base}/export?mimeType=${encodeURIComponent("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}`, tk)
+      : await driveGet(`${base}?alt=media&supportsAllDrives=true`, tk);
+    return XLSX.read(await r.arrayBuffer(), { type: "array" });
+  } catch (e) { throw new Error(`“${label}”: ${e.message}`); }
 }
 // Ô Excel → chữ. Ngày (số serial) → dd/mm/yyyy, giờ (phần lẻ của ngày) → HH:MM
 function cellText(v) {
@@ -384,17 +477,23 @@ function setCheck(t, cls) { const s = $("checkStatus"); s.textContent = t; s.cla
 $("checkBtn").onclick = async () => {
   const btn = $("checkBtn");
   try {
-    const chatF = $("chatFile").files[0], formF = $("formFile").files[0], congF = $("congFile").files[0];
+    const chatF = $("chatFile").files[0];
     if (!chatF) throw new Error("Chưa chọn file chat .txt");
-    if (!formF) throw new Error("Chưa chọn file Form đăng ký OT");
-    if (!congF) throw new Error("Chưa chọn file Bảng công");
+    if (!fileId($("congUrl").value)) throw new Error("Chưa nhập link BẢNG CÔNG 2026");
+    if (!fileId($("formUrl").value)) throw new Error("Chưa nhập link Form đăng ký OT");
     const mv = $("month").value.match(/^(\d{4})-(\d{2})$/);
     if (!mv) throw new Error("Chưa chọn tháng");
     const year = +mv[1], month = +mv[2];
-    btn.disabled = true; setCheck("Đang đọc dữ liệu…");
+    const tkPromise = getToken(false); // gọi trước await để popup không bị chặn
+    btn.disabled = true; setCheck("Đang đăng nhập Google…");
+    const tk = await tkPromise;
     $("cardChat").hidden = $("cardCong").hidden = true;
+    setCheck("Đang tải 2 file từ Google…");
 
-    const wbs = [await loadWorkbook(formF), await loadWorkbook(congF)]; // chọn nhầm ô cũng được
+    const wbs = await Promise.all([ // điền nhầm ô cũng được
+      loadWorkbook($("formUrl").value, "Form đăng ký OT", tk),
+      loadWorkbook($("congUrl").value, "BẢNG CÔNG 2026", tk)]);
+    setCheck("Đang so sánh…");
     const fs = findSheet(wbs, n => { const m = n.match(/^(\d{4})\.\s*thang\s*(\d{1,2})$/); return m && +m[1] === year && +m[2] === month; },
       `“${year}.Tháng ${month}” trong Form đăng ký OT`);
     const cs = findSheet(wbs, n => { const m = n.match(/t(\d{1,2})\.(\d{4})\s*$/); return n.startsWith("cong") && m && +m[1] === month && +m[2] === year; },
